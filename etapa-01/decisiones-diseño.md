@@ -1,1 +1,5 @@
-
+Introducción del Tema
+el centro veterinario necesita un sistema que le permita registrar las ventas de productos, como alimentos balanceados, accesorios y transportadoras, así como las atenciones veterinarias como internaciones, revisiones, vacunaciones y/ o otros tratamientos requeridos.
+Este sistema permitirá mantener un registro detallado de cada mascota y de su historial medico y compras, para así facilitar las futuras consultas, tratamientos y revisiones. Para que así la veterinaria pueda contar con una información más organizada y flexible sobre sus clientes.
+ Además, el sistema permitirá clasificar a los clientes según su modalidad de compra, diferenciando entre compradores mayoristas y minoristas. Este sistema también proporcionará información sobre el movimiento de los productos, permitiendo identificar que marcas presentan mayor rotación o se agotan con mayor frecuencia y cuales tienen menor nivel de ventas. Esto facilita la planificación de stock.
+También contará con una plataforma destinada a los clientes, donde podrán realizar compras de alimentos y accesorios, solicitar turnos para revisiones veterinarias y poder acceder a su registro de atenciones y compras realizadas.
