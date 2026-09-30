@@ -1,1 +1,198 @@
+create database Veterinaria_Proyecto_integrador_Grupo8;
+go
+
+USE Veterinaria_Proyecto_integrador;
+GO
+--Proyecto integrador - Base de datos veterinaria--
+
+-- personas y roles (persona, profesional_veterinario, cliente, administrador)
+
+CREATE TABLE Persona (
+    dni INT NOT NULL,
+    nombre VARCHAR(50) NOT NULL,
+    apellido VARCHAR(50) NOT NULL,
+    telefono VARCHAR(20) NOT NULL,
+
+    CONSTRAINT PK_persona
+    PRIMARY KEY (dni)
+)
+
+CREATE TABLE Profesional_Veterinario (
+    dni INT NOT NULL,
+    especialidad VARCHAR(50) NOT NULL,
+
+    CONSTRAINT PK_profesional_veterinario
+    PRIMARY KEY (dni),
+
+    CONSTRAINT FK_profesional_veterinario_persona
+    FOREIGN KEY (dni) REFERENCES persona(dni)
+)
+
+CREATE TABLE Cliente (
+    dni INT NOT NULL,
+    direccion VARCHAR(100) NOT NULL,
+
+    CONSTRAINT PK_cliente
+    PRIMARY KEY (dni),
+
+    CONSTRAINT FK_cliente_persona
+    FOREIGN KEY (dni) REFERENCES persona(dni)
+)
+
+CREATE TABLE Administrador (
+    id_admin INT NOT NULL,
+    dni INT NOT NULL,
+
+    CONSTRAINT PK_administrador
+    PRIMARY KEY (id_admin),
+
+    CONSTRAINT UQ_administrador_dni
+    UNIQUE (dni),
+
+    CONSTRAINT FK_administrador_persona
+    FOREIGN KEY (dni) REFERENCES persona(dni)
+)
+
+--Turnos y mascotas (mascota, turno)
+
+CREATE TABLE Mascota (
+    id_mascota INT NOT NULL,
+    nombre VARCHAR(50) NOT NULL,
+    raza VARCHAR(50) NOT NULL,
+    dni_cliente INT NOT NULL,
+
+    CONSTRAINT PK_mascota
+    PRIMARY KEY (id_mascota),
+
+    CONSTRAINT FK_mascota_cliente
+    FOREIGN KEY (dni_cliente) REFERENCES Cliente(dni)
+)
+
+CREATE TABLE Turno (
+    id_turno INT NOT NULL,
+    fecha DATE NOT NULL,
+    hora TIME NOT NULL,
+    id_mascota INT NOT NULL,
+    dni_veterinario INT NOT NULL,
+
+    CONSTRAINT PK_turno
+    PRIMARY KEY (id_turno),
+
+    CONSTRAINT FK_turno_mascota
+    FOREIGN KEY (id_mascota) REFERENCES Mascota(id_mascota),
+
+    CONSTRAINT FK_turno_veterinario
+    FOREIGN KEY (dni_veterinario) REFERENCES Profesional_Veterinario(dni),
+
+    -- (Un veterinario no puede tener dos turnos a la misma fecha y hora, se aplica restrincion de unicidad)
+    CONSTRAINT UQ_turno_veterinario_fecha_hora
+    UNIQUE (dni_veterinario, fecha, hora)
+)
+
+-- productos y proveedores (producto, proveedor, producto_proveedor)
+
+CREATE TABLE Proveedor (
+    cuit char(11) NOT NULL,
+    razon_social VARCHAR(100) NOT NULL,
+    telefono VARCHAR(20) NOT NULL,
+
+    CONSTRAINT PK_proveedor
+    PRIMARY KEY (cuit)
+)
+
+CREATE TABLE Producto (
+    cod_producto INT NOT NULL,
+    nombre_producto VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(100) NOT NULL,
+    precio DECIMAL(10,2) NOT NULL,
+    stock INT NOT NULL,
+    id_admin INT NOT NULL,
+
+    CONSTRAINT PK_producto
+    PRIMARY KEY (cod_producto),
+
+    CONSTRAINT FK_producto_administrador
+    FOREIGN KEY (id_admin) REFERENCES Administrador(id_admin),
+
+    CONSTRAINT CK_producto_stock CHECK (stock >= 0), --(producto no puede tener stock negativo)
+    CONSTRAINT CK_producto_precio CHECK (precio >= 0) --(producto no puede tener precio negativo)
+)
+
+CREATE TABLE producto_proveedor (
+    cod_producto INT NOT NULL,
+    cuit char(11) NOT NULL,
+
+    CONSTRAINT PK_producto_proveedor
+    PRIMARY KEY (cod_producto, cuit),
+
+    CONSTRAINT FK_producto_proveedor_producto
+    FOREIGN KEY (cod_producto) REFERENCES Producto(cod_producto),
+
+    CONSTRAINT FK_producto_proveedor_proveedor
+    FOREIGN KEY (cuit) REFERENCES Proveedor(cuit)
+)
+
+-- compras y facturas (metodo_pago, compra, detalle_compra, factura_compra)
+
+CREATE TABLE Metodo_Pago (
+    id_pago INT NOT NULL,
+    tipo_pago VARCHAR(50) NOT NULL,
+
+    CONSTRAINT PK_metodo_pago
+    PRIMARY KEY (id_pago),
+
+)
+
+CREATE TABLE compra (
+    id_compra INT NOT NULL,
+    fecha DATE NOT NULL,
+    dni INT NOT NULL,
+    id_pago INT NOT NULL,
+
+    CONSTRAINT PK_compra
+    PRIMARY KEY (id_compra),
+
+    CONSTRAINT FK_compra_cliente
+    FOREIGN KEY (dni) REFERENCES Cliente(dni),
+
+    CONSTRAINT FK_compra_metodo_pago
+    FOREIGN KEY (id_pago) REFERENCES Metodo_Pago(id_pago)
+)
+
+-- Una compra tiene muchos productos
+CREATE TABLE Detalle_Compra (
+    id_compra INT NOT NULL,
+    cod_producto INT NOT NULL,
+    cantidad INT NOT NULL,
+    precio_unitario DECIMAL(10,2) NOT NULL,
+
+    CONSTRAINT PK_detalle_compra
+    PRIMARY KEY (id_compra, cod_producto),
+
+    CONSTRAINT FK_detalle_compra_compra
+    FOREIGN KEY (id_compra) REFERENCES compra(id_compra),
+
+    CONSTRAINT FK_detalle_compra_producto
+    FOREIGN KEY (cod_producto) REFERENCES Producto(cod_producto),
+
+    CONSTRAINT CK_detalle_compra_cantidad CHECK (cantidad > 0),
+    CONSTRAINT CK_detalle_compra_precio CHECK (precio_unitario >= 0)
+)
+
+-- La factura se emite sobre una compra (no repite cliente ni producto)
+CREATE TABLE Factura_Compra (
+    id_factura INT NOT NULL,
+    id_compra INT NOT NULL,
+    fecha DATE NOT NULL,
+        
+    CONSTRAINT PK_factura_compra
+    PRIMARY KEY (id_factura),
+
+    CONSTRAINT UQ_factura_compra
+    UNIQUE (id_compra),
+
+    CONSTRAINT FK_factura_compra_compra
+    FOREIGN KEY (id_compra) REFERENCES compra(id_compra)
+)
+
 
