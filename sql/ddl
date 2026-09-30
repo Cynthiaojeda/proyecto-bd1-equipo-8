@@ -1,5 +1,5 @@
-create database Veterinaria_Proyecto_integrador_Grupo8;
-go
+CREATE DATABASE Veterinaria_Proyecto_integrador_Grupo8;
+GO
 
 USE Veterinaria_Proyecto_integrador;
 GO
