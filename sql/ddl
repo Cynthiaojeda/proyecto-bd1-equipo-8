@@ -195,4 +195,473 @@ CREATE TABLE Factura_Compra (
     FOREIGN KEY (id_compra) REFERENCES compra(id_compra)
 )
 
+ADICIÓN DE INTEGRIGAD REFERENCIAL - REGLAS DE BORRADO/MODIFICACION
 
+CREATE DATABASE VeterinariaProyIntGrupo8;
+GO
+
+USE VeterinariaProyIntGrupo8;
+GO
+
+/*--- TABLA PERSONA ---*/
+CREATE TABLE Persona (
+	dni INT NOT NULL,
+	nombre VARCHAR(50) NOT NULL,
+	apellido VARCHAR(50) NOT NULL,
+	telefono VARCHAR(20) NOT NULL,
+
+	CONSTRAINT PK_Persona
+	PRIMARY KEY (dni)
+);
+GO
+
+/*--- TABLA PROFESIONAL ---*/
+CREATE TABLE Profesional_Veterinario (
+	dni INT NOT NULL,
+	especialidad VARCHAR(50) NOT NULL,
+
+	CONSTRAINT PK_profesional_veterinario
+	PRIMARY KEY (dni),
+
+	CONSTRAINT FK_profesional_veterinario_persona
+	FOREIGN KEY (dni)
+	REFERENCES Persona(dni)
+);
+GO
+
+/*--- TABLA CLIENTE ---*/
+CREATE TABLE Cliente (
+	nro_cliente INT NOT NULL,
+	dni INT NOT NULL,
+	direccion VARCHAR(100) NOT NULL,
+	ciudad VARCHAR(50) NOT NULL,
+
+	CONSTRAINT PK_cliente
+	PRIMARY KEY (nro_cliente),
+
+	CONSTRAINT UQ_cliente_dni
+	UNIQUE (dni),
+
+	CONSTRAINT FK_cliente_persona
+	FOREIGN KEY (dni)
+	REFERENCES Persona(dni)
+);
+GO
+
+/*--- TABLA MASCOTA ---*/
+CREATE TABLE Mascota (
+	id_mascota INT NOT NULL,
+	nombre_mascota VARCHAR(50) NOT NULL,
+	especie VARCHAR(30) NOT NULL,
+	raza VARCHAR(50) NOT NULL,
+	sexo VARCHAR(20) NOT NULL,
+	edad INT NOT NULL,
+	nro_cliente INT NOT NULL,
+
+	CONSTRAINT PK_mascota
+	PRIMARY KEY (id_mascota),
+
+	CONSTRAINT FK_mascota_cliente
+	FOREIGN KEY (nro_cliente)
+	REFERENCES Cliente(nro_cliente),
+
+        ON DELETE CASCADE     
+	ON UPDATE CASCADE,
+
+	CONSTRAINT CK_mascota_edad
+	CHECK (edad >= 0)
+);
+GO
+
+/*--- TABLA TURNO ---*/
+CREATE TABLE Turno (
+	id_turno INT NOT NULL,
+	fecha DATE NOT NULL,
+	hora TIME NOT NULL,
+	id_mascota INT NOT NULL,
+	dni_profesional INT NOT NULL,
+
+	CONSTRAINT PK_turno
+	PRIMARY KEY (id_turno),
+
+	CONSTRAINT FK_turno_mascota
+	FOREIGN KEY (id_mascota)
+	REFERENCES Mascota(id_mascota),
+
+        ON DELETE CASCADE
+	ON UPDATE CASCADE,
+
+	CONSTRAINT FK_turno_profesional
+	FOREIGN KEY (dni_profesional)
+	REFERENCES Profesional_Veterinario(dni),
+
+        ON DELETE CASCADE
+	ON UPDATE CASCADE,
+
+	/* Un veterinario no puede tener dos turnos en la misma fecha y hora */
+	CONSTRAINT UQ_turno_profesional_fecha_hora
+	UNIQUE (dni_profesional, fecha, hora)
+);
+GO
+
+/*--- TABLA ATENCION ---*/
+CREATE TABLE Atencion (
+	id_atencion INT NOT NULL,
+	id_turno INT NOT NULL,
+	fecha_ingreso DATE NOT NULL,
+	fecha_salida DATE NULL,
+	tipo_atencion VARCHAR(50) NOT NULL,
+	intervencion VARCHAR(200) NOT NULL,
+	observaciones VARCHAR(300) NULL,
+
+	CONSTRAINT PK_atencion
+	PRIMARY KEY (id_atencion),
+
+	/* Un turno puede generar como maximo una atencion */
+	CONSTRAINT UQ_atencion_turno
+	UNIQUE (id_turno),
+
+	CONSTRAINT FK_atencion_turno
+	FOREIGN KEY (id_turno)
+	REFERENCES Turno(id_turno),
+
+        ON DELETE CASCADE
+	ON UPDATE CASCADE,
+
+	CONSTRAINT CK_atencion_tipo
+	CHECK (
+		tipo_atencion IN
+		('Vacunacion', 'Revision', 'Internacion', 'Tratamiento')
+	),
+
+	CONSTRAINT CK_atencion_fechas
+	CHECK (
+		fecha_salida IS NULL
+		OR fecha_salida >= fecha_ingreso
+	)
+);
+GO
+
+/*--- TABLA PROVEEDOR ---*/
+CREATE TABLE Proveedor (
+	cuit CHAR(11) NOT NULL,
+	razon_social VARCHAR(100) NOT NULL,
+	telefono VARCHAR(20) NOT NULL,
+
+	CONSTRAINT PK_proveedor
+	PRIMARY KEY (cuit)
+);
+GO
+
+/*--- TABLA PRODUCTO ---*/
+CREATE TABLE Producto (
+	cod_producto INT NOT NULL,
+	nombre_producto VARCHAR(80) NOT NULL,
+	descripcion VARCHAR(150) NOT NULL,
+	tipo_producto VARCHAR(30) NOT NULL,
+	stock INT NOT NULL,
+	precio DECIMAL(10, 2) NOT NULL,
+
+	CONSTRAINT PK_producto
+	PRIMARY KEY (cod_producto),
+
+	CONSTRAINT CK_producto_tipo
+	CHECK (
+		tipo_producto IN
+		('Alimento', 'Accesorio', 'Transportadora')
+	),
+
+	CONSTRAINT CK_producto_stock
+	CHECK (stock >= 0),
+
+	CONSTRAINT CK_producto_precio
+	CHECK (precio >= 0)
+);
+GO
+
+/*--- TABLA ALIMENTO ---*/
+CREATE TABLE Alimento (
+	cod_producto INT NOT NULL,
+	marca VARCHAR(50) NOT NULL,
+	cantidad_kg DECIMAL(10,2) NOT NULL,
+
+	CONSTRAINT PK_alimento
+	PRIMARY KEY (cod_producto),
+
+	CONSTRAINT FK_alimento_producto
+	FOREIGN KEY (cod_producto)
+	REFERENCES Producto(cod_producto),
+
+	CONSTRAINT CK_alimento_cantidad
+	CHECK (cantidad_kg >= 0)
+);
+GO
+
+/*--- TABLA PROVEE ---*/
+CREATE TABLE Provee (
+	cuit CHAR(11) NOT NULL,
+	cod_producto INT NOT NULL,
+
+	CONSTRAINT PK_provee
+	PRIMARY KEY (cuit, cod_producto),
+
+	CONSTRAINT FK_provee_proveedor
+	FOREIGN KEY (cuit)
+	REFERENCES Proveedor(cuit),
+
+	CONSTRAINT FK_provee_producto
+	FOREIGN KEY (cod_producto)
+	REFERENCES Producto(cod_producto)
+);
+GO
+
+/*--- TABLA COMPRA ---*/
+CREATE TABLE Compra (
+	nro_compra INT NOT NULL,
+	fecha DATE NOT NULL,
+	tipo_cliente VARCHAR(20) NOT NULL,
+	monto_total DECIMAL(10, 2) NOT NULL,
+	nro_cliente INT NOT NULL,
+
+	CONSTRAINT PK_compra
+	PRIMARY KEY (nro_compra),
+
+	CONSTRAINT FK_compra_cliente
+	FOREIGN KEY (nro_cliente)
+	REFERENCES Cliente(nro_cliente),
+
+	CONSTRAINT CK_compra_tipo_cliente
+	CHECK (
+		tipo_cliente IN ('Mayorista', 'Minorista')
+	),
+
+	CONSTRAINT CK_compra_monto
+	CHECK (monto_total >= 0)
+);
+GO
+
+/*--- DETALLE COMPRA ---*/
+CREATE TABLE Detalle_Compra (
+	nro_compra INT NOT NULL,
+	cod_producto INT NOT NULL,
+	cantidad INT NOT NULL,
+	precio_unitario DECIMAL(10,2) NOT NULL,
+
+	CONSTRAINT PK_detalle_compra
+	PRIMARY KEY (nro_compra, cod_producto),
+
+	CONSTRAINT FK_detalle_compra_compra
+	FOREIGN KEY (nro_compra)
+	REFERENCES Compra(nro_compra),
+
+        ON DELETE CASCADE
+	ON UPDATE CASCADE,
+
+	CONSTRAINT FK_detalle_compra_producto
+	FOREIGN KEY (cod_producto)
+	REFERENCES Producto(cod_producto),
+
+        ON DELETE CASCADE
+	ON UPDATE CASCADE,
+
+	CONSTRAINT CK_detalle_compra_cantidad
+	CHECK (cantidad > 0),
+
+	CONSTRAINT CK_detalle_compra_precio
+	CHECK (precio_unitario >= 0)
+);
+GO
+
+/*=== CARGA DE DATOS ===*/
+INSERT INTO Persona 
+	(dni, nombre, apellido, telefono)
+VALUES
+	(40111222, 'Juan', 'Perez', '3794000001'),
+	(40222333, 'Maria', 'Gomez', '3794000002'),
+	(40333444, 'Carlos', 'Lopez', '3794000003'),
+	(40444555, 'Ana', 'Martinez', '3794000004'),
+	(40555666, 'Luis', 'Fernandez', '3794000005'),
+	(40666777, 'Sofia', 'Rodriguez', '3794000006'),
+	(40777888, 'Pedro', 'Gonzales', '3794000007'),
+	(40888999, 'Laura', 'Ramirez', '3794000008'),
+	(40999000, 'Diego', 'Sanchez', '3794000009'),
+	(41000111, 'Valentina', 'Torres', '3794000010');
+GO
+
+INSERT INTO Profesional_Veterinario
+	(dni, especialidad)
+VALUES
+	(40111222, 'Clinica'),
+	(40222333, 'Cirugia'),
+	(40333444, 'Dermatologia'),
+	(40444555, 'Cardiologia'),
+	(40555666, 'Oftalmologia'),
+	(40666777, 'Traumatologia'),
+	(40777888, 'Nutricion'),
+	(40888999, 'Odontologia'),
+	(40999000, 'Oncologia'),
+	(41000111, 'Neurologia');
+GO
+
+INSERT INTO Cliente
+	(nro_cliente, dni, direccion, ciudad)
+VALUES
+	(1, 40111222, 'San Martin 123', 'Corrientes'),
+	(2, 40222333, 'Belgrano 456', 'Corrientes'),
+	(3, 40333444, 'Junin 789', 'Resistencia'),
+	(4, 40444555, 'Italia 321', 'Corrientes'),
+	(5, 40555666, 'Colon 654', 'Resistencia'),
+	(6, 40666777, 'Moreno 987', 'Corrientes'),
+	(7, 40777888, 'Rivadavia 147', 'Corrientes'),
+	(8, 40888999, 'Mitre 258', 'Resistencia'),
+	(9, 40999000, 'Salta 369', 'Corrientes'),
+	(10, 41000111, 'Lavalle 741', 'Corrientes');
+GO
+
+INSERT INTO Mascota
+	(id_mascota, nombre_mascota, especie, raza, sexo, edad, nro_cliente)
+VALUES
+	(1, 'Luna', 'Perro', 'Labrador', 'Hembra', 4, 1),
+	(2, 'Max', 'Perro', 'Caniche', 'Macho', 3, 2),
+	(3, 'Michi', 'Gato', 'Siames', 'Hembra', 2, 3),
+	(4, 'Rocky', 'Perro', 'Bulldog', 'Macho', 5, 4),
+	(5, 'Nala', 'Gato', 'Persa', 'Hembra', 1, 5),
+	(6, 'Toby', 'Perro', 'Beagle', 'Macho', 6, 6),
+	(7, 'Coco', 'Ave', 'Canario', 'Macho', 2, 7),
+	(8, 'Mora', 'Perro', 'Dalmata', 'Hembra', 4, 8),
+	(9, 'Simba', 'Gato', 'Mestizo', 'Macho', 3, 9),
+	(10, 'Kira', 'Perro', 'Pastor Aleman', 'Hembra', 7, 10);
+GO
+
+INSERT INTO Proveedor
+	(cuit, razon_social, telefono)
+VALUES
+	('30701111111', 'Pet Supply SA', '3794100001'),
+	('30702222222', 'Veterinaria Norte SRL', '3794100002'),
+	('30703333333', 'Distribuidora Animal SA', '3794100003'),
+	('30704444444', 'Mascotas del Litoral SRL', '3794100004'),
+	('30705555555', 'Alimentos Pet SA', '3794100005'),
+	('30706666666', 'Animal Shop SRL', '3794100006'),
+	('30707777777', 'Productos Veterinarios SA', '3794100007'),
+	('30708888888', 'Pet Market SRL', '3794100008'),
+	('30709999999', 'Distribuidora Mascotas SA', '3794100009'),
+	('30710000000', 'Mundo Animal SRL', '3794100010');
+GO
+
+INSERT INTO Producto
+	(cod_producto, nombre_producto, descripcion, tipo_producto, stock, precio)
+VALUES
+	(1, 'Alimento Premium Perro', 'Alimento balanceado para perros', 'Alimento', 50, 25000.00),
+	(2, 'Alimento Premium Gato', 'Alimento balanceado para gatos', 'Alimento', 40, 22000.00),
+	(3, 'Alimento Cachorros', 'Alimento balanceado para cachorros', 'Alimento', 35, 27000.00),
+	(4, 'Alimento Adultos', 'Alimento para perros adultos', 'Alimento', 30, 24000.00),
+	(5, 'Alimento Gatos Premium', 'Alimento premium para gatos', 'Alimento', 25, 29000.00),
+	(6, 'Alimento Light', 'Alimento reducido en calorias', 'Alimento', 20, 26000.00),
+	(7, 'Alimento Senior', 'Alimento para mascotas mayores', 'Alimento', 15, 28000.00),
+	(8, 'Alimento Razas Pequenas', 'Alimento para perros pequenos', 'Alimento', 30, 23000.00),
+	(9, 'Collar Ajustable', 'Collar regulable para perros', 'Accesorio', 25, 8000.00),
+	(10, 'Transportadora', 'Transportadora para mascotas', 'Transportadora', 10, 45000.00);
+GO
+
+INSERT INTO Alimento
+	(cod_producto, marca, cantidad_kg)
+VALUES
+	(1, 'Royal Canin', 15.00),
+	(2, 'Purina', 10.00),
+	(3, 'Pedigree', 12.00),
+	(4, 'Excellent', 10.00),
+	(5, 'Pro Plan', 8.00),
+	(6, 'Vitalcan', 7.00),
+	(7, 'Old Prince', 9.00),
+	(8, 'Dog Chow', 11.00);
+GO
+
+INSERT INTO Provee
+	(cuit, cod_producto)
+VALUES
+	('30701111111', 1),
+	('30702222222', 2),
+	('30703333333', 3),
+	('30704444444', 4),
+	('30705555555', 5),
+	('30706666666', 6),
+	('30707777777', 7),
+	('30708888888', 8),
+	('30709999999', 9),
+	('30710000000', 10);
+GO
+
+INSERT INTO Turno
+	(id_turno, fecha, hora, id_mascota, dni_profesional)
+VALUES
+	(1, '2026-10-01', '09:00', 1, 40111222),
+	(2, '2026-10-01', '10:00', 2, 40222333),
+	(3, '2026-10-02', '09:30', 3, 40333444),
+	(4, '2026-10-02', '11:00', 4, 40444555),
+	(5, '2026-10-03', '10:30', 5, 40555666),
+	(6, '2026-10-03', '12:00', 6, 40666777),
+	(7, '2026-10-04', '09:00', 7, 40777888),
+	(8, '2026-10-04', '10:30', 8, 40888999),
+	(9, '2026-10-05', '11:00', 9, 40999000),
+	(10, '2026-10-05', '12:30', 10, 41000111);
+GO
+
+INSERT INTO Atencion
+	(id_atencion, id_turno, fecha_ingreso, fecha_salida, tipo_atencion, intervencion, observaciones)
+VALUES
+	(1, 1, '2026-10-01', '2026-10-01', 'Revision', 'Control general', 'Mascota en buen estado'),
+	(2, 2, '2026-10-01', '2026-10-01', 'Vacunacion', 'Aplicacion de vacuna', 'Vacuna anual aplicada'),
+	(3, 3, '2026-10-02', '2026-10-02', 'Revision', 'Revision general', 'Sin observaciones'),
+	(4, 4, '2026-10-02', '2026-10-02', 'Tratamiento', 'Tratamiento dermatologico', 'Se indica tratamiento'),
+	(5, 5, '2026-10-03', '2026-10-03', 'Revision', 'Control general', 'Estado saludable'),
+	(6, 6, '2026-10-03', '2026-10-04', 'Internacion', 'Observacion y tratamiento', 'Se recomienda reposo'),
+	(7, 7, '2026-10-04', '2026-10-04', 'Vacunacion', 'Aplicacion de vacuna', 'Vacunacion realizada'),
+	(8, 8, '2026-10-04', '2026-10-04', 'Revision', 'Control odontologico', 'Sin inconvenientes'),
+	(9, 9, '2026-10-05', NULL, 'Tratamiento', 'Tratamiento veterinario', 'Continua en observacion'),
+	(10, 10, '2026-10-05', '2026-10-05', 'Revision', 'Control general', 'Mascota en buen estado');
+GO
+
+INSERT INTO Compra
+	(nro_compra, fecha, tipo_cliente, monto_total, nro_cliente)
+VALUES
+	(1, '2026-09-01', 'Minorista', 25000.00, 1),
+	(2, '2026-09-02', 'Minorista', 44000.00, 2),
+	(3, '2026-09-03', 'Mayorista', 81000.00, 3),
+	(4, '2026-09-04', 'Minorista', 24000.00, 4),
+	(5, '2026-09-05', 'Mayorista', 87000.00, 5),
+	(6, '2026-09-06', 'Minorista', 26000.00, 6),
+	(7, '2026-09-07', 'Mayorista', 84000.00, 7),
+	(8, '2026-09-08', 'Minorista', 46000.00, 8),
+	(9, '2026-09-09', 'Mayorista', 90000.00, 9),
+	(10, '2026-09-10', 'Minorista', 32000.00, 10);
+GO
+
+INSERT INTO Detalle_Compra
+	(nro_compra, cod_producto, cantidad, precio_unitario)
+VALUES
+	(1, 1, 1, 25000.00),
+	(2, 2, 2, 22000.00),
+	(3, 3, 3, 27000.00),
+	(4, 4, 1, 24000.00),
+	(5, 5, 3, 29000.00),
+	(6, 6, 1, 26000.00),
+	(7, 7, 3, 28000.00),
+	(8, 8, 2, 23000.00),
+	(9, 9, 3, 30000.00),
+	(10, 10, 1, 45000.00);
+GO
+
+/*=== CONSULTAS DE VERIFICACION ===*/
+SELECT * FROM Persona;
+SELECT * FROM Profesional_Veterinario;
+SELECT * FROM Cliente;
+SELECT * FROM Mascota;
+SELECT * FROM Turno;
+SELECT * FROM Atencion;
+SELECT * FROM Proveedor;
+SELECT * FROM Producto;
+SELECT * FROM Alimento;
+SELECT * FROM Provee;
+SELECT * FROM Compra;
+SELECT * FROM Detalle_Compra;
+GO
