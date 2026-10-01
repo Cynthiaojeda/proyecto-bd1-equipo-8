@@ -1,1 +1,3 @@
+INTEGRIDAD REFERENCIAL (reglas de borrado/modificación)
 
+La implementación es fue hecha porque así se  respeta la lógica de negocio y mantiene la integridad referencial al evitar registros huérfanos, incorporándose en las tablas de Profesional y Cliente (como especializaciones de Persona), Mascota (vinculada a Cliente y Atención), Turno (asociada a Mascota y Profesional), Alimento y la intermedia Provee (dependientes de Producto), así como en las de ventas (Compra y Detalle_Compra), logrando un equilibrio al automatizar la limpieza de datos dependientes sin arriesgar la pérdida de información histórica contable clave.
