@@ -1,1 +1,7 @@
+Para verificar la integridad física y la consistencia lógica del modelo relacional, se realizó un exhaustivo ciclo de pruebas de validación directa sobre la base de datos ejecutando de forma secuencial el script de definición de datos (DDL) y el bloque de manipulación (DML).
 
+En primer lugar, se testearon las restricciones de integridad declarativas (`CHECK` y `UNIQUE`) mediante la simulación de cargas inválidas; se intentaron ingresar turnos superpuestos para un mismo profesional en idéntico horario, montos o stocks negativos, datos fuera de dominio en el campo sexo de las mascotas y fechas de salida anteriores a las de ingreso en la tabla de atenciones, comprobando que el motor de base de datos intercepte y rechace correctamente cada una de estas transacciones.
+
+En segundo lugar, se validó la integridad referencial y las dependencias jerárquicas de las claves foráneas (`FOREIGN KEY`), garantizando que no existan registros huérfanos ni la posibilidad de insertar entidades hijas (como detalles de compra o registros de atención) sin la existencia previa de sus correspondientes entidades padre (como productos, compras o clientes).
+
+Por último, se ejecutó un conjunto de consultas de verificación mediante sentencias `SELECT *` sobre la totalidad de las tablas pobladas con los 10 registros de prueba por entidad, corroborando que la estructura responda adecuadamente a las 20 reglas de negocio fijadas, respete la Tercera Forma Normal (3FN) y mantenga la trazabilidad completa del historial clínico, comercial y operacional de la veterinaria.
