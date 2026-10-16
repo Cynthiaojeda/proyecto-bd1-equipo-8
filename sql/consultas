@@ -552,3 +552,29 @@ SELECT * FROM Compra;
 SELECT * FROM Detalle_Compra;
 GO
 
+SELECT 
+    P.dni AS DNI_Cliente,
+    P.nombre + ' ' + P.apellido AS Nombre_Completo,
+    CL.ciudad AS Ciudad,
+    COUNT(DISTINCT M.id_mascota) AS Total_Mascotas,
+    COUNT(DISTINCT C.nro_compra) AS Total_Compras,
+    SUM(C.monto_total) AS Inversion_Total
+FROM Persona P
+INNER JOIN Cliente CL 
+    ON P.dni = CL.dni
+LEFT JOIN Mascota M 
+    ON CL.nro_cliente = M.nro_cliente
+LEFT JOIN Compra C 
+    ON CL.nro_cliente = C.nro_cliente
+GROUP BY P.dni, P.nombre, P.apellido, CL.ciudad
+HAVING COUNT(DISTINCT M.id_mascota) >= 2
+   AND SUM(C.monto_total) > (
+       -- Subconsulta que calcula el promedio general de inversión por cliente
+       SELECT AVG(Total_Cliente) 
+       FROM (
+           SELECT SUM(monto_total) AS Total_Cliente 
+           FROM Compra 
+           GROUP BY nro_cliente
+       ) AS PromedioGeneral
+   )
+ORDER BY Inversion_Total DESC;
