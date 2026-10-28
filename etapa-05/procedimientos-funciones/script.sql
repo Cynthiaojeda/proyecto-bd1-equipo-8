@@ -11,29 +11,22 @@ CREATE PROCEDURE dbo.CrearCompra
 	@IdCompra INT,
 	@Fecha DATE,
 	@DniCliente INT,
-	@Metodo_Pago VARCHAR(50)
 AS
 /**/
 BEGIN
-	DECLARE @MetodoPago int = (
-		SELECT id_pago FROM Metodo_Pago WHERE @Metodo_Pago = tipo_pago
-	)
 	SET NOCOUNT ON
 	--si no existe una compra con ese ID y
 	--si el usuario existe
-	--si el metodo de pago es valido
 	IF @IdCompra NOT IN (SELECT id_compra FROM Compra) AND
-		@DniCliente IN (SELECT DNI FROM Cliente) AND
-		@Metodo_Pago IN (SELECT tipo_pago FROM Metodo_Pago)
+		@DniCliente IN (SELECT DNI FROM Cliente)
 		--creamos un nuevo registro vacio de venta
 		INSERT INTO dbo.Compra
 		VALUES
 			(@IdCompra,
 			@Fecha,
 			'minorista',
-			@DniCliente,
 			0,
-			@MetodoPago);
+			@DniCliente);
 END
 GO
 
@@ -77,24 +70,6 @@ BEGIN
 END
 GO
 
---------------------------------------------------------------------
----------Crea una factura vacia-------------------------------------
---------------------------------------------------------------------
-CREATE PROCEDURE dbo.CrearFactura
-	@Id_Factura INT,
-	@Id_Compra INT
-AS
-/**/
-BEGIN
-	DECLARE @Fecha DATE = (
-		SELECT DISTINCT fecha FROM Compra
-		WHERE id_compra = @Id_Compra
-	)
-	IF(@Id_Compra IN (SELECT id_compra FROM Compra WHERE id_compra = @Id_Compra))
-		INSERT INTO Factura_Compra
-			VALUES (@Id_Factura, @Id_Compra, @Fecha)
-END
-
 
 ----------------------------------
 ------------- PRUEBAS-------------
@@ -134,13 +109,6 @@ WHERE id_compra = 90;
 --AgregarVentaUnitaria modifico el monto de compra
 SELECT monto_total FROM Compra
 WHERE Compra = 90;
-
---creamos la factura final
-EXEC dbo.CrearFactura
-	0,
-	90
-
-SELECT * FROM Factura_Compra;
 
 --limpiar datos de prueba
 
