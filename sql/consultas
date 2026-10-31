@@ -2,11 +2,11 @@
    FACTURA / COMPROBANTE DE VENTA
    ========================================== */
 SELECT
-    C.nro_compra AS Numero_Comprobante,
+    C.codigo_compra AS Numero_Comprobante,
     C.fecha AS Fecha_Compra,
     C.tipo_cliente AS Tipo_Cliente,
 
-    CL.nro_cliente AS Numero_Cliente,
+    CL.dni AS Numero_Cliente,
     P.dni AS DNI_Cliente,
     P.nombre AS Nombre_Cliente,
     P.apellido AS Apellido_Cliente,
@@ -14,8 +14,8 @@ SELECT
     CL.direccion AS Direccion_Cliente,
     CL.ciudad AS Ciudad_Cliente,
 
-    PR.cod_producto AS Codigo_Producto,
-    PR.nombre_producto AS Producto,
+    PR.codigo_producto AS Codigo_Producto,
+    PR.nombre AS Producto,
     DC.cantidad AS Cantidad,
     DC.precio_unitario AS Precio_Unitario,
 
@@ -24,7 +24,7 @@ SELECT
 
     CAST(
         SUM(DC.cantidad * DC.precio_unitario)
-        OVER (PARTITION BY C.nro_compra)
+        OVER (PARTITION BY C.codigo_compra)
         AS DECIMAL(12,2)
     ) AS Total_Calculado_Detalle,
 
@@ -32,23 +32,22 @@ SELECT
 
 FROM Compra C
 INNER JOIN Cliente CL
-    ON C.nro_cliente = CL.nro_cliente
+    ON C.dni_cliente = CL.dni
 INNER JOIN Persona P
     ON CL.dni = P.dni
 INNER JOIN Detalle_Compra DC
-    ON C.nro_compra = DC.nro_compra
+    ON C.codigo_compra = DC.codigo_compra
 INNER JOIN Producto PR
-    ON DC.cod_producto = PR.cod_producto
+    ON DC.codigo_producto = PR.codigo_producto
 
-ORDER BY C.nro_compra, PR.cod_producto;
+ORDER BY C.codigo_compra, PR.codigo_producto;
 GO
-
 
 /* ==========================================
    VERIFICACION DE TOTALES
    ========================================== */
 SELECT
-    C.nro_compra AS Numero_Comprobante,
+    C.codigo_compra AS Numero_Comprobante,
     C.monto_total AS Total_Registrado,
 
     ISNULL(
@@ -61,14 +60,14 @@ SELECT
 
 FROM Compra C
 LEFT JOIN Detalle_Compra DC
-    ON C.nro_compra = DC.nro_compra
+    ON C.codigo_compra = DC.codigo_compra
 
-GROUP BY C.nro_compra, C.monto_total
+GROUP BY C.codigo_compra, C.monto_total
 
 HAVING C.monto_total <>
     ISNULL(SUM(DC.cantidad * DC.precio_unitario), 0)
 
-ORDER BY C.nro_compra;
+ORDER BY C.codigo_compra;
 GO
 
 
