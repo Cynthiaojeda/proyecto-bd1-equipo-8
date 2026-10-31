@@ -1,1 +1,269 @@
+/* ==========================================================
+   MANEJO DE TRANSACCIONES
+   ========================================================== */
 
+/* ----------------------------------------------------------
+   TRANSACCION: REGISTRAR UNA COMPRA CORRECTAMENTE
+   ---------------------------------------------------------- */
+
+SET XACT_ABORT ON;
+GO
+
+DECLARE @dni_cliente INT = 30111222;
+DECLARE @codigo_producto INT = 1;
+DECLARE @cantidad INT = 2;
+
+DECLARE @codigo_compra INT;
+DECLARE @stock_actual INT;
+DECLARE @precio_unitario DECIMAL(10,2);
+DECLARE @monto_total DECIMAL(10,2);
+
+BEGIN TRY
+    BEGIN TRANSACTION;
+
+    -- Verificar que exista el cliente.
+    IF NOT EXISTS (
+        SELECT 1
+        FROM dbo.Cliente
+        WHERE dni = @dni_cliente
+    )
+        THROW 50001, 'El cliente no existe.', 1;
+
+    -- Consultar y proteger el producto durante la operación.
+    SELECT
+        @stock_actual = stock,
+        @precio_unitario = precio
+    FROM dbo.Producto WITH (UPDLOCK, HOLDLOCK)
+    WHERE codigo_producto = @codigo_producto;
+
+    IF @stock_actual IS NULL
+        THROW 50002, 'El producto no existe.', 1;
+
+    IF @cantidad <= 0
+        THROW 50003, 'La cantidad debe ser mayor que cero.', 1;
+
+    IF @stock_actual < @cantidad
+        THROW 50004, 'Stock insuficiente.', 1;
+
+    SET @monto_total = @precio_unitario * @cantidad;
+
+    -- Obtener el próximo código siguiendo la estructura del proyecto.
+    SELECT @codigo_compra =
+        ISNULL(MAX(codigo_compra), 0) + 1
+    FROM dbo.Compra WITH (UPDLOCK, HOLDLOCK);
+
+    -- 1. Insertar la cabecera de la compra.
+    INSERT INTO dbo.Compra (
+        codigo_compra, fecha, tipo_cliente, monto_total, dni_cliente
+    )
+    VALUES (
+        @codigo_compra, CAST(GETDATE() AS DATE),
+        'Minorista', @monto_total, @dni_cliente
+    );
+
+    -- 2. Insertar el detalle de la compra.
+    INSERT INTO dbo.Detalle_Compra (
+        codigo_compra, codigo_producto, cantidad, precio_unitario
+    )
+    VALUES (
+        @codigo_compra, @codigo_producto, @cantidad, @precio_unitario
+    );
+
+    -- 3. Descontar del stock las unidades vendidas.
+    UPDATE dbo.Producto
+    SET stock = stock - @cantidad
+    WHERE codigo_producto = @codigo_producto;
+
+    IF @@ROWCOUNT <> 1
+        THROW 50005, 'No se pudo actualizar el stock.', 1;
+
+    COMMIT TRANSACTION;
+
+    SELECT
+        @codigo_compra AS codigo_compra,
+        @monto_total AS monto_total,
+        'Compra registrada correctamente' AS resultado;
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0
+        ROLLBACK TRANSACTION;
+
+    SELECT
+        ERROR_NUMBER() AS numero_error,
+        ERROR_MESSAGE() AS mensaje_error,
+        'La transacción fue cancelada y sus cambios fueron revertidos.'
+            AS resultado;
+END CATCH;
+GO
+
+/*Resultado esperado: si el cliente existe, el producto existe y hay stock suficiente, se insertan la compra y su detalle y se descuenta el stock. 
+Si falla una de las operaciones antes del COMMIT, se ejecuta ROLLBACK y no quedan cambios parciales.*/
+
+
+/* ----------------------------------------------------------
+   PRUEBA DE ERROR INTENCIONAL DESPUES DEL PRIMER INSERT
+   ---------------------------------------------------------- */
+
+SET XACT_ABORT ON;
+GO
+
+DECLARE @dni_cliente_prueba INT = 30111222;
+DECLARE @codigo_compra_prueba INT;
+DECLARE @compras_antes INT;
+DECLARE @compras_despues INT;
+
+SELECT @compras_antes = COUNT(*)
+FROM dbo.Compra;
+
+BEGIN TRY
+    BEGIN TRANSACTION;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM dbo.Cliente
+        WHERE dni = @dni_cliente_prueba
+    )
+        THROW 50101, 'El cliente de prueba no existe.', 1;
+
+    SELECT @codigo_compra_prueba =
+        ISNULL(MAX(codigo_compra), 0) + 1
+    FROM dbo.Compra WITH (UPDLOCK, HOLDLOCK);
+
+    -- Primer INSERT: se ejecuta dentro de la transacción.
+    INSERT INTO dbo.Compra (
+        codigo_compra, fecha, tipo_cliente, monto_total, dni_cliente
+    )
+    VALUES (
+        @codigo_compra_prueba, CAST(GETDATE() AS DATE),
+        'Minorista', 0, @dni_cliente_prueba
+    );
+
+    -- Error intencional inmediatamente después del INSERT.
+    THROW 50102, 'Error intencional para comprobar el ROLLBACK.', 1;
+
+    -- Esta instrucción no se alcanza.
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0
+        ROLLBACK TRANSACTION;
+
+    SELECT
+        ERROR_NUMBER() AS numero_error,
+        ERROR_MESSAGE() AS mensaje_error,
+        'Se ejecutó ROLLBACK.' AS resultado;
+END CATCH;
+
+SELECT @compras_despues = COUNT(*)
+FROM dbo.Compra;
+
+SELECT
+    @compras_antes AS compras_antes,
+    @compras_despues AS compras_despues,
+    CASE
+        WHEN @compras_antes = @compras_despues
+            THEN 'PRUEBA CORRECTA: no quedó el INSERT.'
+        ELSE 'REVISAR: cambió la cantidad de compras.'
+    END AS verificacion;
+
+-- Comprobar que el código temporal no quedó registrado.
+SELECT *
+FROM dbo.Compra
+WHERE codigo_compra = @codigo_compra_prueba;
+GO
+
+/*Resultado esperado: se muestra el error intencional y se informa que se ejecutó ROLLBACK. 
+La cantidad de compras antes y después debe ser igual, y la última consulta no debe devolver filas para el código temporal. 
+La prueba debe ejecutarse sin otras sesiones insertando compras al mismo tiempo, para que la comparación de cantidades sea clara.*/
+
+
+/* ----------------------------------------------------------
+   TRANSACCION FALLIDA: STOCK INSUFICIENTE
+   ---------------------------------------------------------- */
+
+SET XACT_ABORT ON;
+GO
+
+DECLARE @dni_cliente_error INT = 30111222;
+DECLARE @codigo_producto_error INT = 1;
+DECLARE @cantidad_error INT = 999999;
+
+DECLARE @codigo_compra_error INT;
+DECLARE @stock_error INT;
+
+BEGIN TRY
+    BEGIN TRANSACTION;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM dbo.Cliente
+        WHERE dni = @dni_cliente_error
+    )
+        THROW 50201, 'El cliente no existe.', 1;
+
+    SELECT @codigo_compra_error =
+        ISNULL(MAX(codigo_compra), 0) + 1
+    FROM dbo.Compra WITH (UPDLOCK, HOLDLOCK);
+
+    -- Insertar una cabecera temporal dentro de la transacción.
+    INSERT INTO dbo.Compra (
+        codigo_compra, fecha, tipo_cliente, monto_total, dni_cliente
+    )
+    VALUES (
+        @codigo_compra_error, CAST(GETDATE() AS DATE),
+        'Minorista', 0, @dni_cliente_error
+    );
+
+    SELECT @stock_error = stock
+    FROM dbo.Producto WITH (UPDLOCK, HOLDLOCK)
+    WHERE codigo_producto = @codigo_producto_error;
+
+    IF @stock_error IS NULL
+        THROW 50202, 'El producto no existe.', 1;
+
+    IF @stock_error < @cantidad_error
+        THROW 50203, 'Stock insuficiente. Se cancela la compra.', 1;
+
+    COMMIT TRANSACTION;
+
+    SELECT 'Compra confirmada.' AS resultado;
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0
+        ROLLBACK TRANSACTION;
+
+    SELECT
+        ERROR_MESSAGE() AS mensaje_error,
+        'ROLLBACK ejecutado: compra temporal revertida.' AS resultado;
+END CATCH;
+
+-- El código temporal no debe aparecer.
+SELECT *
+FROM dbo.Compra
+WHERE codigo_compra = @codigo_compra_error;
+GO
+
+/*Resultado esperado: la transacción falla debido a que la cantidad solicitada supera el stock disponible. 
+Al producirse el error, el bloque `CATCH` ejecuta un `ROLLBACK TRANSACTION`, lo que deshace la inserción de la cabecera temporal de la compra 
+para garantizar la atomicidad, por lo que no queda ningún registro parcial en la tabla `Compra`.*/
+
+
+/* ----------------------------------------------------------
+   VERIFICAR COMPRAS Y STOCK
+   ---------------------------------------------------------- */
+
+SELECT *
+FROM dbo.Compra
+ORDER BY codigo_compra;
+
+SELECT *
+FROM dbo.Detalle_Compra
+ORDER BY codigo_compra;
+
+SELECT
+    codigo_producto,
+    nombre,
+    stock,
+    precio
+FROM dbo.Producto;
+GO
