@@ -267,3 +267,258 @@ SELECT
     precio
 FROM dbo.Producto;
 GO
+
+
+
+/* ==========================================================
+   OPTIMIZACION MEDIANTE INDICES
+   ========================================================== */
+
+
+/* ----------------------------------------------------------
+   CREAR TABLA AUXILIAR PARA LA PRUEBA DE RENDIMIENTO
+   ATENCION: SI EXISTE, SE ELIMINA Y SE VUELVE A CREAR.
+   ---------------------------------------------------------- */
+
+IF OBJECT_ID('dbo.CompraHistoricaPrueba', 'U') IS NOT NULL
+    DROP TABLE dbo.CompraHistoricaPrueba;
+GO
+
+CREATE TABLE dbo.CompraHistoricaPrueba (
+    id_compra BIGINT IDENTITY(1,1) NOT NULL,
+    fecha DATE NOT NULL,
+    monto_total DECIMAL(12,2) NOT NULL
+);
+GO
+
+/* ----------------------------------------------------------
+   INSERTAR UN MILLON DE REGISTROS SIMULADOS
+   ---------------------------------------------------------- */
+
+SET NOCOUNT ON;
+GO
+
+;WITH Numeros AS (
+    SELECT TOP (1000000)
+        ROW_NUMBER() OVER (
+            ORDER BY (SELECT NULL)
+        ) AS n
+    FROM sys.all_objects AS a
+    CROSS JOIN sys.all_objects AS b
+    CROSS JOIN sys.all_objects AS c
+)
+INSERT INTO dbo.CompraHistoricaPrueba (
+    fecha,
+    monto_total
+)
+SELECT
+    DATEADD(
+        DAY,
+        CONVERT(
+            INT,
+            CHECKSUM(NEWID()) & 2147483647
+        ) % 1825,
+        CONVERT(DATE, '20200101')
+    ),
+    CONVERT(
+        DECIMAL(12,2),
+        (
+            CONVERT(
+                BIGINT,
+                CHECKSUM(NEWID()) & 2147483647
+            ) % 1000000
+        ) / 100.0
+    )
+FROM Numeros;
+GO
+
+-- Comprobar la cantidad de registros
+SELECT COUNT(*) AS cantidad_registros
+FROM dbo.CompraHistoricaPrueba;
+GO
+
+/*Resultado esperado: la consulta de verificación debe devolver 1000000. 
+La tabla no tiene un índice creado explícitamente sobre fecha. 
+SQL Server puede usar un recorrido de tabla (Table Scan) cuando no existe un índice útil; 
+el operador exacto depende de la estructura y del plan elegido por el optimizador.*/
+
+
+/* ----------------------------------------------------------
+   PRIMERA PRUEBA: CONSULTA SIN INDICE
+   ---------------------------------------------------------- */
+
+SET STATISTICS TIME ON;
+SET STATISTICS IO ON;
+GO
+
+SELECT fecha, monto_total
+FROM dbo.CompraHistoricaPrueba
+WHERE fecha BETWEEN '20230101' AND '20230331';
+GO
+
+/*Resultado esperado: El motor de base de datos realiza un recorrido completo de la tabla (Table Scan), lo que obliga a analizar un millón de registros. 
+Esto genera tiempos de respuesta elevados, alto uso de CPU y una gran cantidad de lecturas lógicas.*/
+
+
+/* ----------------------------------------------------------
+   SEGUNDA PRUEBA: INDICE AGRUPADO
+   ---------------------------------------------------------- */
+
+CREATE CLUSTERED INDEX IX_CompraHistoricaPrueba_Fecha
+ON dbo.CompraHistoricaPrueba(fecha);
+GO
+
+SELECT fecha, monto_total
+FROM dbo.CompraHistoricaPrueba
+WHERE fecha BETWEEN '20230101' AND '20230331';
+GO
+
+/*Resultado esperado: El optimizador cambia su estrategia de acceso a una búsqueda directa (Clustered Index Seek). 
+Esto reduce de manera significativa el trabajo del motor, disminuyendo drásticamente el tiempo de ejecución y las lecturas lógicas en comparación 
+con el escenario sin índices.*/
+
+
+/* ----------------------------------------------------------
+   TERCERA PRUEBA: INDICE NO AGRUPADO CON COBERTURA
+   ---------------------------------------------------------- */
+
+DROP INDEX IX_CompraHistoricaPrueba_Fecha
+ON dbo.CompraHistoricaPrueba;
+GO
+
+CREATE NONCLUSTERED INDEX
+    IX_CompraHistoricaPrueba_Fecha_Cobertura
+ON dbo.CompraHistoricaPrueba(fecha)
+INCLUDE (monto_total);
+GO
+
+SELECT fecha, monto_total
+FROM dbo.CompraHistoricaPrueba
+WHERE fecha BETWEEN '20230101' AND '20230331';
+GO
+
+SET STATISTICS IO OFF;
+SET STATISTICS TIME OFF;
+GO
+
+/*Resultado esperado: la consulta se resuelve utilizando únicamente el índice gracias a la inclusión de la columna monto_total (INCLUDE), generando un Index Seek 
+puro sin necesidad de acceder a los datos completos de la tabla. Esto optimiza y disminuye aún más el número de lecturas lógicas necesarias.*/
+
+
+/* ----------------------------------------------------------
+   INDICES RECOMENDADOS PARA LAS TABLAS DEL PROYECTO
+   ---------------------------------------------------------- */
+
+/*Además de la prueba masiva, se proponen índices no agrupados sobre columnas usadas para relacionar o filtrar registros. 
+Estos índices son complementarios y no reemplazan los índices que ya crean las claves primarias y restricciones UNIQUE.*/
+
+-- Indice para buscar mascotas por cliente
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IX_Mascota_dni_cliente'
+      AND object_id = OBJECT_ID('dbo.Mascota')
+)
+BEGIN
+    CREATE NONCLUSTERED INDEX IX_Mascota_dni_cliente
+    ON dbo.Mascota(dni_cliente);
+END;
+GO
+
+-- Indice para buscar mascotas por atencion
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IX_Mascota_id_atencion'
+      AND object_id = OBJECT_ID('dbo.Mascota')
+)
+BEGIN
+    CREATE NONCLUSTERED INDEX IX_Mascota_id_atencion
+    ON dbo.Mascota(id_atencion);
+END;
+GO
+
+-- Indice para buscar turnos por mascota
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IX_Turno_id_mascota'
+      AND object_id = OBJECT_ID('dbo.Turno')
+)
+BEGIN
+    CREATE NONCLUSTERED INDEX IX_Turno_id_mascota
+    ON dbo.Turno(id_mascota);
+END;
+GO
+
+-- Indice para consultar compras de un cliente por fecha
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IX_Compra_dni_cliente_fecha'
+      AND object_id = OBJECT_ID('dbo.Compra')
+)
+BEGIN
+    CREATE NONCLUSTERED INDEX IX_Compra_dni_cliente_fecha
+    ON dbo.Compra(dni_cliente, fecha)
+    INCLUDE (monto_total, tipo_cliente);
+END;
+GO
+
+-- Indice para buscar detalles por producto
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.indexes
+    WHERE name = 'IX_Detalle_Compra_codigo_producto'
+      AND object_id = OBJECT_ID('dbo.Detalle_Compra')
+)
+BEGIN
+    CREATE NONCLUSTERED INDEX
+        IX_Detalle_Compra_codigo_producto
+    ON dbo.Detalle_Compra(codigo_producto)
+    INCLUDE (
+        codigo_compra,
+        cantidad,
+        precio_unitario
+    );
+END;
+GO
+
+
+/* ----------------------------------------------------------
+   CONSULTAS PARA COMPROBAR LOS INDICES
+   REEMPLAZAR LOS VALORES DE EJEMPLO POR DATOS EXISTENTES.
+   ---------------------------------------------------------- */
+
+-- Buscar mascotas de un cliente
+SELECT *
+FROM dbo.Mascota
+WHERE dni_cliente = 30111222;
+
+-- Buscar turnos de una mascota
+SELECT *
+FROM dbo.Turno
+WHERE id_mascota = 1;
+
+-- Buscar compras de un cliente ordenadas por fecha
+SELECT
+    codigo_compra,
+    fecha,
+    monto_total,
+    tipo_cliente
+FROM dbo.Compra
+WHERE dni_cliente = 30111222
+ORDER BY fecha;
+
+-- Buscar detalles de compra de un producto
+SELECT
+    codigo_compra,
+    codigo_producto,
+    cantidad,
+    precio_unitario
+FROM dbo.Detalle_Compra
+WHERE codigo_producto = 1;
+GO
+
+/*En una base con pocos registros, como los diez ejemplos iniciales del proyecto, el optimizador puede preferir un recorrido de tabla porque su costo es bajo. 
+La mejora de los índices se evalúa con más claridad cuando las tablas tienen un volumen de datos significativo y las consultas son representativas del uso real.*/
